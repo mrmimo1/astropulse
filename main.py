@@ -201,6 +201,24 @@ def weather_media(lang,day,index,kind,category,fallback):
         return pool[(day+index//2)%len(pool)]
     return fallback
 
+SHARE_COPY = {'bn': ['📤 Bondhu ke pathao', 'AstroPulse 🌷 - প্রতিদিন ছোট্ট ভাবনা, গান আর শোনার কিছু। নিজের মতো করে পড়ে দেখুন। ভবিষ্যতের নিশ্চয়তা নয়।'], 'en': ['📤 Share with a friend', 'AstroPulse 🌷 - a daily thought, song and listening idea. Take what fits your day. Reflection, not a guaranteed prediction.'], 'hi': ['📤 दोस्त को भेजें', 'AstroPulse 🌷 - रोज एक छोटा विचार, गीत और सुनने का सुझाव। अपने दिन के हिसाब से चुनें। यह पक्की भविष्यवाणी नहीं है।']}
+BN_HOOKS = ['🌷 আজ নিজের জন্য ছোট্ট একটা সুযোগ রাখুন…', '💫 আজকের একটা ছোট কাজেই শুরু হোক…', '🌷 সব একসঙ্গে নয়, আজ একটু একটু করে…', '💫 আজ একটু থেমে নিজের কথা শুনুন…', '🌷 আজকের কথাটা নিজের মতো করে নিন…', '💫 বড় পরিকল্পনা থাক, শুরুটা ছোট হোক…', '🌷 আজ একটু সহজ করে দেখলে কেমন হয়?', '💫 আজ কোন ছোট কাজটা শেষ করতে চান?', '🌷 নিজের ওপর একটু কম চাপ দিন আজ…', '💫 আজ শেখার জন্য একটু জায়গা রাখুন…', '🌷 আজকের ব্যস্ততায় নিজের বিরতিটাও থাক…', '💫 একটা ছোট বদল দিয়ে শুরু করা যায়…', '🌷 আজ কারও খোঁজ নিতে ইচ্ছে করছে?', '💫 আজ একটা ঝুলে থাকা কাজ একটু এগোক…', '🌷 দিনটা যেমনই হোক, ছোট্ট চেষ্টা থাক…', '💫 আজ একটা ভালো কথা মনে রাখুন…', '🌷 আজ আপনার নিজের গতিতেই চলুন…']
+
+def share_markup(language,username):
+    import re
+    if not isinstance(username,str) or not re.fullmatch(r'[A-Za-z0-9_]{5,32}',username):return None
+    label,text=SHARE_COPY.get(language,SHARE_COPY['en'])
+    query=urllib.parse.urlencode({'url':'https://t.me/'+username,'text':text})
+    return {'inline_keyboard':[[{'text':label,'url':'https://t.me/share/url?'+query}]]}
+
+def discover_bot_username():
+    try:
+        username=os.environ.get('TELEGRAM_BOT_USERNAME')
+        if username:return username
+        me=request('https://api.telegram.org/bot'+os.environ['TELEGRAM_BOT_TOKEN']+'/getMe')
+        return me['result']['username'] if me.get('ok') and me.get('result',{}).get('is_bot') else None
+    except Exception:return None
+
 def short_reading(profile,date,weather=None):
     lang = profile['language']
     r = SHORT_READING[lang]
@@ -214,7 +232,8 @@ def short_reading(profile,date,weather=None):
     music = r['music']+song[0]+' - '+song[1]+(' '+song[2] if song[2] else '')
     pod = weather_media(lang,day,rotation_variant(profile['dob'],date,day,1000000),'podcasts',category,r['podcasts'][day-1][pod_index])
     podcast = r['podcastLabel']+pod[0]+' - '+pod[1]+(' '+pod[2] if pod[2] else '')
-    return '\n'.join([r['heading'],'',r['advice'],r['tones'][tone]+' '+r['day'][day-1]+(' '+WEATHER[lang]['advice'][category] if weather else ''),
+    heading=BN_HOOKS[rotation_variant(profile['dob'],date,day,len(BN_HOOKS))] if lang=='bn' else r['heading']
+    return '\n'.join([heading,'',r['advice'],r['tones'][tone]+' '+r['day'][day-1]+(' '+WEATHER[lang]['advice'][category] if weather else ''),
                       r['example']+r['examples'][day-1],'',r['color']+r['colors'][day-1],
                       r['number']+(bn_digits(day) if lang == 'bn' else str(day)),
                       *(['',weather_line(lang,weather)] if weather else []),
@@ -258,6 +277,7 @@ def run():
         profiles.extend(batch)
         if len(batch)<500: break
         offset+=500
+    bot_username=discover_bot_username() if profiles else None
     counts={'sent':0,'failed':0,'unknown':0,'skipped':0}
     for profile in profiles:
         is_due,date=due(profile,dt.datetime.now(dt.timezone.utc))
@@ -277,10 +297,13 @@ def run():
         try: data=panchang(profile,date)
         except (urllib.error.URLError,ValueError,KeyError,TimeoutError): data=None
         weather=fetch_weather(profile,date)
+        try: digest_text=render(profile,date,data,weather=weather)
+        except Exception: digest_text='Ektu jhamela hocche 🙏 Ektu pore /today diye abar try koro.'
+        markup=share_markup(profile['language'],bot_username)
         result=None
         try:
             result=request('https://api.telegram.org/bot'+os.environ['TELEGRAM_BOT_TOKEN']+'/sendMessage','POST',
-                           {'chat_id':profile['chat_id'],'text':render(profile,date,data,weather=weather),'disable_web_page_preview':True})
+                           {'chat_id':profile['chat_id'],'text':digest_text,'disable_web_page_preview':True,**({'reply_markup':markup} if markup else {})})
             status='sent' if result.get('ok') else 'failed'
         except urllib.error.HTTPError:
             status='failed' # Deliberately no automatic resend after explicit HTTP failure.
