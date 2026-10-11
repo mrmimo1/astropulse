@@ -212,5 +212,5 @@ def run():
 if __name__=='__main__':
     try:
         run()
-    except Exception:
-        raise SystemExit('Digest failed. Check backend/service availability and settings; private details redacted.')
+    except Exception as e:
+        print('DIGEST ERROR:', type(e).__name__, str(e)[:200]); raise SystemExit('Digest failed.')
