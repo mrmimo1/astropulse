@@ -50,7 +50,7 @@ DISCLAIMER = {
 'bn': 'ভাবনার সহায়তা, ভবিষ্যদ্বাণী নয়। চিকিৎসা, অর্থ বা আইনি পরামর্শ নয়। জন্মের সময় ও স্থান ভবিষ্যতের জন্মছক মডিউলের জন্য রাখা হচ্ছে; এই সংস্করণে লগ্ন, চন্দ্ররাশি বা দশা গণনা হয় না।',
 'hi': 'चिंतन के लिए, भविष्यवाणी नहीं। चिकित्सा, वित्तीय या कानूनी सलाह नहीं। जन्म का समय और स्थान भविष्य के जन्म-कुंडली मॉड्यूल के लिए रखे जाते हैं; इस संस्करण में लग्न, चंद्र राशि या दशा नहीं निकाली जाती।'}
 UNAVAILABLE = {'en':'Panchang unavailable. The number calculation still works.', 'bn':'পঞ্চাঙ্গ এখন পাওয়া যাচ্ছে না। সংখ্যার গণনা ঠিকই কাজ করছে।', 'hi':'पंचांग अभी उपलब्ध नहीं है। संख्या की गणना फिर भी काम कर रही है।'}
-INDIA_ONLY = {'en':'Panchang in v1 is for confirmed Indian locations only. All provider times below are IST.', 'bn':'এই সংস্করণে পঞ্চাঙ্গ শুধু নিশ্চিত ভারতীয় স্থানের জন্য। নিচের সব সময় IST।', 'hi':'इस संस्करण में पंचांग केवल पुष्टि किए गए भारतीय स्थानों के लिए है। नीचे सभी समय IST हैं।'}
+INDIA_ONLY = {'en':'Panchang in v1 is for confirmed Indian locations only. All provider times below are IST.', 'bn':'এই সংস্করণে পঞ্চাঙ্গ শুধু নিশ্চিত ভারতীয় স্থানের জন্য। নিচের সব সময় ভারতীয় মান সময়ে।', 'hi':'इस संस्करण में पंचांग केवल पुष्टि किए गए भारतीय स्थानों के लिए है। नीचे सभी समय IST हैं।'}
 
 def reduce_number(value):
     n = int(value)
@@ -139,22 +139,41 @@ def personal_reading(n, language):
         '',r['heads'][6],r['rule']
     ])
 
+
+BN_NAKSHATRA = ['অশ্বিনী', 'ভরণী', 'কৃত্তিকা', 'রোহিণী', 'মৃগশিরা', 'আর্দ্রা', 'পুনর্বসু', 'পুষ্যা', 'আশ্লেষা', 'মঘা', 'পূর্ব ফাল্গুনী', 'উত্তর ফাল্গুনী', 'হস্তা', 'চিত্রা', 'স্বাতী', 'বিশাখা', 'অনুরাধা', 'জ্যেষ্ঠা', 'মূলা', 'পূর্বাষাঢ়া', 'উত্তরাষাঢ়া', 'শ্রবণা', 'ধনিষ্ঠা', 'শতভিষা', 'পূর্ব ভাদ্রপদ', 'উত্তর ভাদ্রপদ', 'রেবতী']
+
+def bn_digits(value):
+    return str(value).translate(str.maketrans('0123456789','০১২৩৪৫৬৭৮৯'))
+
+def bn_timezone(value):
+    return 'ভারতীয় মান সময় (UTC+০৫:৩০)' if value.lower() in ('asia/kolkata','asia/calcutta') else friendly_timezone(value)
+
+def bn_panchang(data):
+    index = data.get('nakshatraIndex')
+    name = BN_NAKSHATRA[index] if isinstance(index,int) and 0 <= index < 27 else data['nakshatra']
+    paksha = {'shukla':'শুক্লপক্ষ','krishna':'কৃষ্ণপক্ষ'}.get(data.get('paksha'),data.get('paksha',''))
+    lines = ['তিথি: '+bn_digits(data['tithiNumber'])+' ('+paksha+')','নক্ষত্র: '+str(name),
+             'সূর্যোদয়: '+bn_digits(data['sunrise'])+' | সূর্যাস্ত: '+bn_digits(data['sunset'])]
+    if 'rahuKaal' in data:
+        r = data['rahuKaal']; lines.append('রাহুকাল: '+bn_digits(r.get('start','?'))+' - '+bn_digits(r.get('end','?')))
+    return lines
+
 def render(profile,date,data=None,why=False):
     lang=profile['language']
     n=numbers(profile['dob'],date)
-    lines=['AstroPulse | '+date+' | '+friendly_timezone(profile['timezone'])]
+    lines=['অ্যাস্ট্রোপালস | আজকের সংখ্যাভিত্তিক পাঠ | '+bn_digits(date)+' | '+bn_timezone(profile['timezone']) if lang == 'bn' else 'AstroPulse | '+date+' | '+friendly_timezone(profile['timezone'])]
     for label,value,calc in zip(LABELS[lang],n['values'],n['traces']):
-        lines.append(f'{label}: {value}'+(f' ({calc})' if why else ''))
-    lines+=['',personal_reading(n,lang),'',DISCLAIMER[lang]]
-    if why: lines+=['',METHOD,'Calendar-year cycle; all results reduced to 1-9.']
+        lines.append(f"{label}: {bn_digits(value) if lang == 'bn' else value}"+(f" ({bn_digits(calc.replace(' -> ', ' → ')) if lang == 'bn' else calc})" if why else ''))
+    lines+=['',bn_digits(personal_reading(n,lang)) if lang == 'bn' else personal_reading(n,lang),'',DISCLAIMER[lang]]
+    if why: lines+=['','গণনার নিয়ম: অঙ্কজ্যোতিষ, সব সংখ্যা ১-৯-এ নামানো হয়। ব্যক্তিগত বছরের হিসাব জানুয়ারি থেকে ডিসেম্বর ধরে।'] if lang == 'bn' else ['',METHOD,'Calendar-year cycle; all results reduced to 1-9.']
     if data:
-        lines+=['',INDIA_ONLY[lang], 'Panchang | '+profile['location_label'],
-                f"Tithi: {data['tithiNumber']} ({data.get('paksha','')})",
-                'Nakshatra: '+str(data['nakshatra']),
-                'Sunrise: '+str(data['sunrise'])+' | Sunset: '+str(data['sunset'])]
-        if 'rahuKaal' in data:
-            r=data['rahuKaal']; lines.append('Rahu Kaal: '+str(r.get('start','?'))+' - '+str(r.get('end','?')))
-        lines+=['Source: https://www.kundlidost.in/api/']
+        lines+=['',INDIA_ONLY[lang], ('পঞ্চাঙ্গ | ' if lang == 'bn' else 'Panchang | ')+profile['location_label']]
+        if lang == 'bn': lines+=bn_panchang(data)
+        else:
+            lines += [f"Tithi: {data['tithiNumber']} ({data.get('paksha','')})",'Nakshatra: '+str(data['nakshatra']),'Sunrise: '+str(data['sunrise'])+' | Sunset: '+str(data['sunset'])]
+            if 'rahuKaal' in data:
+                r=data['rahuKaal']; lines.append('Rahu Kaal: '+str(r.get('start','?'))+' - '+str(r.get('end','?')))
+        lines+=[('সূত্র: ' if lang == 'bn' else 'Source: ')+'https://www.kundlidost.in/api/']
     elif not why:
         lines+=['',UNAVAILABLE[lang] if profile['panchang_india'] else INDIA_ONLY[lang]]
     return '\n'.join(lines)
@@ -212,5 +231,5 @@ def run():
 if __name__=='__main__':
     try:
         run()
-    except Exception as e:
-        print('DIGEST ERROR:', type(e).__name__, str(e)[:200]); raise SystemExit('Digest failed.')
+    except Exception:
+        raise SystemExit('Digest failed. Check backend/service availability and settings; private details redacted.')
