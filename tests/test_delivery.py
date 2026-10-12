@@ -68,3 +68,39 @@ class Delivery(unittest.TestCase):
             self.assertEqual(len(sends),1)
             self.assertIn('Ektu jhamela hocche',sends[0]['text'])
             self.assertEqual(ledger['status'],'sent')
+
+
+class AIDelivery(unittest.TestCase):
+    def test_ai_off_and_cap_exhausted_never_call_provider(self):
+        profile = {'chat_id': 42, 'dob': '1992-03-14', 'language': 'bn', 'ai_enabled': False}
+        with patch.dict(main.os.environ, {'GEMINI_API_KEY': 'offline-placeholder'}, clear=True), \
+             patch.object(main, 'ai_generate') as generate, patch.object(main, 'db', return_value=False) as db:
+            self.assertIsNone(main.ai_for(profile, '2026-10-11'))
+            db.assert_not_called()
+            profile['ai_enabled'] = True
+            self.assertIsNone(main.ai_for(profile, '2026-10-11'))
+            db.assert_called_once_with('rpc/astro_ai_claim', 'POST',
+                {'p_chat_id': 42, 'p_kind': 'digest', 'p_limit': 5})
+            generate.assert_not_called()
+
+    def test_ai_payload_omits_birth_and_location_identifiers(self):
+        profile = {'chat_id': 42, 'dob': '1992-03-14', 'language': 'bn', 'ai_enabled': True,
+                   'latitude': 19.1, 'longitude': 72.8, 'location_label': 'Private place'}
+        output = {'thought': 'এখন কাজটা দেখে নিন।', 'action': 'প্রথম ধাপ লিখুন।', 'reminder': 'ভবিষ্যদ্বাণী নয়।'}
+        with patch.dict(main.os.environ, {'GEMINI_API_KEY': 'offline-placeholder'}, clear=True), \
+             patch.object(main, 'db', return_value=True), patch.object(main, 'ai_generate', return_value=output) as generate:
+            self.assertEqual(main.ai_for(profile, '2026-10-11', weather={'category': 'rain'}), output)
+            payload = generate.call_args.args[0]
+            self.assertEqual(set(payload), {'language', 'date', 'kind', 'numbers', 'weather'})
+            self.assertEqual(payload['weather'], 'rain')
+            self.assertNotIn(profile['dob'], json.dumps(payload))
+            self.assertNotIn(profile['location_label'], json.dumps(payload))
+
+    def test_ai_provider_failure_allows_catalog_fallback(self):
+        profile = {'chat_id': 42, 'dob': '1992-03-14', 'language': 'bn', 'ai_enabled': True}
+        with patch.dict(main.os.environ, {'GEMINI_API_KEY': 'offline-placeholder'}, clear=True), \
+             patch.object(main, 'db', return_value=True), patch.object(main, 'ai_generate', side_effect=RuntimeError('offline')):
+            self.assertIsNone(main.ai_for(profile, '2026-10-11'))
+        text = main.render(profile, '2026-10-11')
+        self.assertIn(main.SHORT_READING['bn']['notice'], text)
+        self.assertNotIn('ছোট্ট', text)
