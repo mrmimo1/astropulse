@@ -27,4 +27,11 @@ class Numbers(unittest.TestCase):
             p={'language':lang,'dob':'1992-03-14','timezone':'Asia/Kolkata','location_label':'Delhi','panchang_india':True}
             text=main.render(p,'2026-10-11')
             self.assertLess(len(text),4096)
-            self.assertIn(main.DISCLAIMER[lang],text)
+            self.assertIn(main.SHORT_READING[lang]['notice'],text)
+            self.assertIn('🎧',text)
+            self.assertIn('🎙️',text)
+            self.assertIn(main.SHORT_READING[lang]['advice'],text)
+            # Detailed /why output retains the full phase/medical disclaimer.
+            detailed=main.render(p,'2026-10-11',why=True)
+            self.assertIn(main.DISCLAIMER[lang],detailed)
+            if lang != 'bn':self.assertIn(main.METHOD,detailed)
