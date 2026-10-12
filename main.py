@@ -288,7 +288,7 @@ def ai_generate(payload):
                 if not re.fullmatch(r'[A-Za-z0-9._-]+',model):continue
                 url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent'
                 headers={'x-goog-api-key':key}
-                body={'contents':[{'parts':[{'text':prompt}]}],'generationConfig':{'temperature':0.6,'maxOutputTokens':700,'responseMimeType':'application/json','thinkingConfig':{'thinkingBudget':0}}}
+                body={'contents':[{'parts':[{'text':prompt}]}],'generationConfig':{'temperature':0.6,'maxOutputTokens':700,'responseMimeType':'application/json'}}
             else:
                 url='https://api.groq.com/openai/v1/chat/completions' if kind=='groq' else 'https://openrouter.ai/api/v1/chat/completions'
                 headers={'Authorization':'Bearer '+key}
